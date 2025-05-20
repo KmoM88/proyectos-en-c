@@ -165,13 +165,45 @@ for (int puerto = puerto_min; puerto <= puerto_max; puerto++) {
 
 ### 4. Soporte de múltiples hosts
 
-- Permitir escanear rangos de IPs: `192.168.1.1-254`.
-- Resolver nombres de dominio (`gethostbyname` o `getaddrinfo`).
+Para soportar el escaneo de múltiples hosts, se agregaron dos funciones auxiliares en [`src/main.c`](src/main.c):
 
-**Aprendizajes:**
-- Manipulación de IPs.
-- Conversión de strings a números.
-- DNS básico.
+- **`parse_ip_range()`**:  
+  Permite detectar y procesar rangos de IPs escritos como `192.168.1.1-254`.  
+  Esta función separa la base de la IP (`192.168.1.`) y los valores inicial y final del rango, permitiendo iterar sobre todas las IPs del rango y escanearlas una a una.
+
+  ```c
+  int parse_ip_range(const char *input, char *base, int *start, int *end);
+  ```
+
+- **`resolve_domain()`**:  
+  Permite aceptar nombres de dominio (por ejemplo, `scanme.nmap.org`) como argumento.  
+  Utiliza la función estándar `getaddrinfo()` para resolver el dominio a una dirección IP antes de realizar el escaneo.
+
+  ```c
+  int resolve_domain(const char *host, char *ipstr, size_t ipstrlen);
+  ```
+
+**¿Cómo funciona en el flujo del programa?**
+
+- Si el primer argumento es un rango de IPs, el programa itera sobre cada IP generada y ejecuta el escaneo de puertos para cada una.
+- Si el primer argumento es un dominio, primero lo resuelve a una IP y luego realiza el escaneo como si fuera una IP normal.
+- Si el argumento es una IP simple, el comportamiento es el mismo que antes.
+
+**Fragmento relevante en [`src/main.c`](src/main.c):**
+```c
+if (parse_ip_range(ip, base, &start, &end)) {
+    for (int i = start; i <= end; i++) {
+        snprintf(ipstr, sizeof(ipstr), "%s%d", base, i);
+        // Escaneo para cada IP generada
+    }
+} else if (!isdigit(ip[0])) {
+    if (resolve_domain(ip, ipstr, sizeof(ipstr))) {
+        // Escaneo para la IP resuelta del dominio
+    }
+}
+```
+
+Estas funciones permiten que el escáner sea más flexible y útil en redes reales, facilitando el escaneo masivo de hosts y el uso de nombres de dominio.
 
 ---
 

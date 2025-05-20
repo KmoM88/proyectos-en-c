@@ -3,8 +3,83 @@
 #include <time.h>
 #include <string.h>
 #include "scanner.h"
+#include <ctype.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+
+// Función auxiliar para saber si es un rango de IPs tipo 192.168.1.1-254
+int parse_ip_range(const char *input, char *base, int *start, int *end) {
+    const char *last_dot = strrchr(input, '.');
+    const char *dash = strchr(input, '-');
+    if (!last_dot || !dash || dash < last_dot) return 0;
+    strncpy(base, input, last_dot - input + 1);
+    base[last_dot - input + 1] = '\0';
+    *start = atoi(last_dot + 1);
+    *end = atoi(dash + 1);
+    return (*start > 0 && *end >= *start && *end <= 254);
+}
+
+// Función auxiliar para resolver dominios
+int resolve_domain(const char *host, char *ipstr, size_t ipstrlen) {
+    struct addrinfo hints, *res;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET;
+    if (getaddrinfo(host, NULL, &hints, &res) != 0) return 0;
+    struct sockaddr_in *addr = (struct sockaddr_in *)res->ai_addr;
+    inet_ntop(AF_INET, &addr->sin_addr, ipstr, ipstrlen);
+    freeaddrinfo(res);
+    return 1;
+}
 
 int main(int argc, char *argv[]) {
+    // --- NUEVO: Soporte para rangos de IPs y dominios ---
+    if (argc >= 3) {
+        char base[32], ipstr[INET_ADDRSTRLEN];
+        int start, end;
+        const char *ip = argv[1];
+
+        if (parse_ip_range(ip, base, &start, &end)) {
+            // Es un rango de IPs
+            for (int i = start; i <= end; i++) {
+                snprintf(ipstr, sizeof(ipstr), "%s%d", base, i);
+                printf("\nEscaneando host %s...\n", ipstr);
+                // Reutiliza la lógica existente para cada IP
+                char *fake_argv[5];
+                fake_argv[0] = argv[0];
+                fake_argv[1] = ipstr;
+                for (int j = 2; j < argc; j++) fake_argv[j] = argv[j];
+                // Llama recursivamente al main para cada IP
+                if (argc == 3)
+                    main(3, fake_argv);
+                else if (argc == 4)
+                    main(4, fake_argv);
+                else if (argc == 5)
+                    main(5, fake_argv);
+            }
+            return 0;
+        } else if (!isdigit(ip[0])) {
+            // Es un dominio
+            if (resolve_domain(ip, ipstr, sizeof(ipstr))) {
+                printf("Dominio %s resuelto a %s\n", ip, ipstr);
+                // Reutiliza la lógica existente para la IP resuelta
+                char *fake_argv[5];
+                fake_argv[0] = argv[0];
+                fake_argv[1] = ipstr;
+                for (int j = 2; j < argc; j++) fake_argv[j] = argv[j];
+                if (argc == 3)
+                    main(3, fake_argv);
+                else if (argc == 4)
+                    main(4, fake_argv);
+                else if (argc == 5)
+                    main(5, fake_argv);
+                return 0;
+            } else {
+                printf("No se pudo resolver el dominio %s\n", ip);
+                return 1;
+            }
+        }
+    }
+
     if (argc == 3) {
         // Modo simple: escanea un solo puerto
         const char *ip = argv[1];
